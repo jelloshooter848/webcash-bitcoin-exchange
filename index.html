@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WBX - WebCash Bitcoin Exchange</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>WBX Exchange</h1>
+            <div id="auth-section">
+                <!-- Auth form will be populated by JS -->
+            </div>
+        </header>
+
+        <main>
+            <div id="market-section" style="display: none;">
+                <!-- Market trading interface -->
+            </div>
+
+            <div id="order-book-section" style="display: none;">
+                <!-- Order book display -->
+            </div>
+        </main>
+
+        <div id="notifications">
+            <!-- Alert messages -->
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="utils/api-helpers.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
