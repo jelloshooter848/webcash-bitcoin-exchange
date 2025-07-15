@@ -284,6 +284,8 @@ const UI = {
                     <button type="submit">Sign In</button>
                 </form>
                 <form class="auth-form" data-type="signup">
+                    <input type="email" placeholder="Email" required>
+                    <input type="password" placeholder="Password" required>
                     <button type="submit">Sign Up</button>
                 </form>
             `;

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supabase Connection Test</title>
+</head>
+<body>
+    <h1>Testing Supabase Connection...</h1>
+    <div id="result">Loading...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script>
+        async function testConnection() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                // Test basic connection
+                const { data, error } = await supabase.from('_test').select('*').limit(1);
+                
+                if (error && error.code === 'PGRST116') {
+                    // Table doesn't exist - this is expected and means connection works!
+                    resultDiv.innerHTML = `
+                        <h2 style="color: green;">✅ Connection Successful!</h2>
+                        <p>Supabase is connected and responding.</p>
+                        <p>Project URL: ${SUPABASE_CONFIG.url}</p>
+                        <p>Ready to create database tables.</p>
+                    `;
+                } else if (error) {
+                    resultDiv.innerHTML = `
+                        <h2 style="color: red;">❌ Connection Error</h2>
+                        <p>Error: ${error.message}</p>
+                        <p>Code: ${error.code}</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <h2 style="color: green;">✅ Connection Successful!</h2>
+                        <p>Supabase is connected and responding.</p>
+                    `;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `
+                    <h2 style="color: red;">❌ Connection Failed</h2>
+                    <p>Error: ${err.message}</p>
+                `;
+            }
+        }
+
+        // Run test when page loads
+        window.addEventListener('load', testConnection);
+    </script>
+</body>
+</html>
