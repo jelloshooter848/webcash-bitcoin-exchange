@@ -149,6 +149,91 @@ main {
     background: #c0392b;
 }
 
+/* Trading Interface */
+.trading-interface {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.market-orders, .limit-orders {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.market-orders h3, .limit-orders h3 {
+    margin-bottom: 1rem;
+    color: #2c3e50;
+    text-align: center;
+}
+
+.limit-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.limit-inputs {
+    display: flex;
+    gap: 1rem;
+}
+
+.input-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.input-group label {
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.input-group input {
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.limit-buttons {
+    display: flex;
+    gap: 1rem;
+}
+
+.limit-buy-btn, .limit-sell-btn,
+.market-buy-btn, .market-sell-btn {
+    flex: 1;
+    padding: 1rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.limit-buy-btn, .market-buy-btn {
+    background: #27ae60;
+    color: white;
+}
+
+.limit-buy-btn:hover, .market-buy-btn:hover {
+    background: #219a52;
+}
+
+.limit-sell-btn, .market-sell-btn {
+    background: #e74c3c;
+    color: white;
+}
+
+.limit-sell-btn:hover, .market-sell-btn:hover {
+    background: #c0392b;
+}
+
 /* Order Book */
 #order-book-section {
     background: white;
@@ -195,6 +280,192 @@ main {
 
 .sell-order {
     background: rgba(231, 76, 60, 0.1);
+}
+
+/* Order Management */
+.cancel-order-btn {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background-color 0.3s;
+}
+
+.cancel-order-btn:hover {
+    background: #c0392b;
+}
+
+.user-order {
+    background-color: #f8f9fa;
+    border-left: 3px solid #3498db;
+}
+
+.user-trade {
+    background-color: #e8f5e8;
+    border-left: 3px solid #27ae60;
+}
+
+/* Trade History */
+.trade-history-toggle {
+    margin: 1rem 0;
+}
+
+.trade-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.trade-table th,
+.trade-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.trade-table th {
+    background: #34495e;
+    color: white;
+    font-weight: 600;
+}
+
+/* My Orders Section */
+.my-orders-section {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.my-orders-section h3 {
+    margin-bottom: 1rem;
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 0.5rem;
+}
+
+.my-order-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 4px solid #3498db;
+}
+
+.order-details {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.order-type {
+    font-weight: bold;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    color: white;
+    min-width: 50px;
+    text-align: center;
+}
+
+.order-type.buy {
+    background: #27ae60;
+}
+
+.order-type.sell {
+    background: #e74c3c;
+}
+
+.order-amount, .order-price, .order-total {
+    font-family: 'Courier New', monospace;
+}
+
+/* Admin Panel */
+.admin-toggle {
+    margin: 1rem 0;
+}
+
+.admin-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e74c3c;
+}
+
+.admin-header h2 {
+    margin: 0;
+    color: #e74c3c;
+}
+
+.refresh-admin-btn {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.refresh-admin-btn:hover {
+    background: #2980b9;
+}
+
+.admin-section {
+    margin-bottom: 2rem;
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 6px;
+}
+
+.admin-section h3 {
+    margin-top: 0;
+    color: #2c3e50;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 4px;
+    overflow: hidden;
+    font-size: 0.85rem;
+}
+
+.admin-table th,
+.admin-table td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.admin-table th {
+    background: #34495e;
+    color: white;
+    font-weight: 600;
+}
+
+.status-open {
+    background-color: #d5f5d5;
+}
+
+.status-matched {
+    background-color: #ffe6e6;
+}
+
+.status-cancelled {
+    background-color: #f0f0f0;
 }
 
 /* Notifications */
@@ -254,5 +525,9 @@ main {
     
     .order-table {
         font-size: 0.9rem;
+    }
+    
+    .limit-inputs {
+        flex-direction: column;
     }
 }

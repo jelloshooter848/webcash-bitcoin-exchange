@@ -69,16 +69,61 @@ const Utils = {
     /**
      * Format currency display
      * @param {number} amount - Amount to format
-     * @param {string} currency - Currency type ('BTC' or 'WC')
+     * @param {string} currency - Currency type ('BTC', 'SATS', or 'WC')
      * @returns {string} - Formatted amount
      */
     formatCurrency(amount, currency) {
         if (currency === 'BTC') {
             return `${parseFloat(amount).toFixed(8)} BTC`;
+        } else if (currency === 'SATS') {
+            return `${Math.round(parseFloat(amount))} sats`;
         } else if (currency === 'WC') {
             return `${parseFloat(amount).toFixed(2)} WC`;
+        } else if (currency === 'WC_PER_SAT') {
+            return `${Math.round(parseFloat(amount))} WC/sat`;
         }
         return amount.toString();
+    },
+
+    /**
+     * Convert BTC to satoshis
+     * @param {number} btc - Amount in BTC
+     * @returns {number} - Amount in satoshis
+     */
+    btcToSats(btc) {
+        return Math.round(parseFloat(btc) * 100000000);
+    },
+
+    /**
+     * Convert satoshis to BTC
+     * @param {number} sats - Amount in satoshis
+     * @returns {number} - Amount in BTC
+     */
+    satsToBtc(sats) {
+        return parseFloat(sats) / 100000000;
+    },
+
+    /**
+     * Convert WC/sat to BTC price (for database storage)
+     * @param {number} wcPerSat - Amount of WC per satoshi
+     * @returns {number} - Price in BTC per WC
+     */
+    wcPerSatToBtcPrice(wcPerSat) {
+        // If 200 WC = 1 sat, then 1 WC = 1/200 sat = 0.005 sat per WC
+        // 0.005 sat = 0.005/100000000 BTC = 0.00000000005 BTC per WC
+        const satsPerWc = 1 / parseFloat(wcPerSat);
+        return satsPerWc / 100000000;
+    },
+
+    /**
+     * Convert BTC price to WC/sat display format
+     * @param {number} btcPrice - Price in BTC per WC
+     * @returns {number} - Amount of WC per satoshi
+     */
+    btcPriceToWcPerSat(btcPrice) {
+        // Convert BTC per WC to sats per WC, then invert to get WC per sat
+        const satsPerWc = parseFloat(btcPrice) * 100000000;
+        return Math.round(1 / satsPerWc);
     },
     
     /**
