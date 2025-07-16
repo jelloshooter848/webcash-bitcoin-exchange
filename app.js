@@ -255,51 +255,47 @@ const Market = {
      */
     async executeMarketTrade(fills, tradeType, totalAmount, totalBTC) {
         try {
-            // Process each fill
+            // Process each fill using the database function to bypass RLS
             for (const fill of fills) {
                 const remainingAmount = fill.originalOrder.amount_wc - fill.amount;
                 const isCompletelyFilled = fill.amount >= fill.originalOrder.amount_wc;
                 
-                // Update the matched order
-                const updateData = {
-                    status: isCompletelyFilled ? 'matched' : 'open',
-                    updated_at: new Date().toISOString()
-                };
-                
-                // Only update amount_wc if order is not completely filled (to avoid constraint violation)
-                if (!isCompletelyFilled) {
-                    updateData.amount_wc = remainingAmount;
-                }
-                
-                const { error: updateError } = await supabase
-                    .from('orders')
-                    .update(updateData)
-                    .eq('id', fill.orderId);
-
-                if (updateError) throw updateError;
-
-                // Create trade record
-                // Convert scientific notation to decimal to avoid database constraint issues
-                const totalBtcDecimal = parseFloat(fill.total.toFixed(20));
-                const tradeData = {
-                    amount_wc: parseFloat(fill.amount.toFixed(8)),
-                    total_btc: totalBtcDecimal > 0 ? totalBtcDecimal : 0.00000000000000000001,
-                    status: 'pending'
-                };
-
+                // Determine buyer and seller IDs
+                let buyerId, sellerId;
                 if (tradeType === 'buy') {
-                    tradeData.buyer_id = AppState.user.id;
-                    tradeData.seller_id = fill.originalOrder.user_id;
+                    buyerId = AppState.user.id;
+                    sellerId = fill.originalOrder.user_id;
                 } else {
-                    tradeData.seller_id = AppState.user.id;
-                    tradeData.buyer_id = fill.originalOrder.user_id;
+                    sellerId = AppState.user.id;
+                    buyerId = fill.originalOrder.user_id;
+                }
+                
+                // Use database function for cross-user order updates
+                const { data: functionResult, error: functionError } = await supabase.rpc(
+                    'execute_market_trade',
+                    {
+                        p_order_id: fill.orderId,
+                        p_new_amount_wc: remainingAmount,
+                        p_new_status: isCompletelyFilled ? 'matched' : 'open',
+                        p_trade_amount_wc: parseFloat(fill.amount.toFixed(8)),
+                        p_trade_total_btc: parseFloat(fill.total.toFixed(20)),
+                        p_buyer_id: buyerId,
+                        p_seller_id: sellerId
+                    }
+                );
+
+                if (functionError) {
+                    console.error('🔄 Market trade database function error:', functionError);
+                    throw new Error(`Database function failed: ${functionError.message}`);
                 }
 
-                const { error: tradeError } = await supabase
-                    .from('trades')
-                    .insert([tradeData]);
-
-                if (tradeError) throw tradeError;
+                // Check if function succeeded
+                if (!functionResult || !functionResult.includes('SUCCESS')) {
+                    console.error('🔄 Market trade database function failed:', functionResult);
+                    throw new Error(`Database function failed: ${functionResult}`);
+                }
+                
+                console.log('🔄 Market trade executed successfully:', functionResult);
             }
 
             // Wait a moment for database changes to propagate, then refresh
