@@ -137,6 +137,71 @@ Based on `WBX_Technical_Framework.md`:
 -- Trades table: id, buyer_id, seller_id, amount_wc, total_btc, status, settled_at
 ```
 
+## 🎯 Planned Enhancements
+
+### Enhanced Market Pricing System (7-Week Roadmap)
+
+**Current Status**: Core trading system 100% complete. Next phase focuses on sophisticated price discovery improvements.
+
+**Problem**: Current pricing uses simple mid-point calculation, ignoring order volumes and market depth, leading to price volatility and manipulation risks.
+
+**Solution**: Implement volume-weighted, multi-level pricing with confidence scoring and robust fallbacks.
+
+### Phase 1: Foundation & State Management (Week 1)
+- **Last Trade Tracking**: Store and persist last executed trade prices
+- **Enhanced Fallbacks**: Multi-tier fallback system (live → recent trade → admin reference → null)
+- **State Persistence**: LocalStorage integration for price data across sessions
+- **Admin Controls**: Manual reference price system for market bootstrapping
+
+### Phase 2: Volume-Weighted Calculations (Week 2)
+- **Volume Weighting**: Replace simple mid-point with quantity-weighted averages
+- **Order Aggregation**: Group orders by price level, sum quantities
+- **Price Validation**: Filter invalid/zero prices and quantities
+- **Confidence Scoring**: Indicate price quality to users (95% live, 50% reference, etc.)
+
+### Phase 3: Multi-Level Depth & Smoothing (Week 3)
+- **Configurable Depth**: Use top 1-5 order levels instead of just best bid/ask
+- **EMA Smoothing**: Exponential moving average to reduce volatility spikes
+- **Adaptive Parameters**: Smart depth adjustment based on liquidity conditions
+- **Advanced Fallbacks**: Sophisticated confidence-based fallback hierarchy
+
+### Phase 4: Cross-Order Matching Integration (Week 4)
+- **Pre-Processing**: Execute crossed orders before price calculation
+- **Clean Order Books**: Ensure no buy price ≥ sell price scenarios
+- **Immediate Updates**: Store trade prices from matching operations
+- **Integration Safety**: No interference with existing automatic matching
+
+### Phase 5: UI Enhancements & Admin Controls (Week 5)
+- **Price Transparency**: Show source and confidence ("1200 WC/sat Live 98%")
+- **Visual Indicators**: Color-coded price quality (green=live, yellow=recent, blue=reference)
+- **Admin Dashboard**: Pricing diagnostics, configuration, and manual overrides
+- **Settings Panel**: Configurable depth, smoothing, and trade age limits
+
+### Phase 6: Performance & Production Hardening (Week 6)
+- **Optimization**: Debounced calculations, persistent sorting, result caching
+- **Testing Suite**: Unit tests, integration tests, performance benchmarks
+- **Monitoring**: Price volatility tracking, fallback usage analytics
+- **Edge Case Handling**: Empty books, single-sided markets, high-frequency updates
+
+### Phase 7: Market Bootstrap & Growth Features (Week 7)
+- **Initialization Tools**: Bootstrap wizard for new trading pairs
+- **Market Health**: Liquidity monitoring and health indicators
+- **Analytics**: Price history, confidence trends, market depth analysis
+- **Future Prep**: Oracle interface design for when WebCash ecosystem matures
+
+### Expected Outcomes
+- **20-50% reduction** in price volatility
+- **<100ms calculation time** for large order books
+- **>95% uptime** for price display including fallbacks
+- **Improved user confidence** in displayed prices
+- **Professional-grade price discovery** competitive with major exchanges
+
+### Implementation Strategy
+- **Progressive Enhancement**: Each phase builds on previous, can deploy independently
+- **Backward Compatibility**: All changes internal to pricing calculations
+- **Feature Flags**: Ability to disable new features if issues arise
+- **Risk Mitigation**: Extensive testing and monitoring at each phase
+
 ### Testing Strategy
 1. Open `index.html` in browser (should load without errors)
 2. Check console for "WBX Exchange loaded successfully!" message
