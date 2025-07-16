@@ -1,24 +1,102 @@
-when i clicked sign up in the browser this popped up: "Sign up failed: Anonymous sign-ins are disabled"
+Test Database Insert Formats
+
+Test Different Insert Formats
+
+Testing different insert formats...
 
 
 
-the browser console log showed the following:
+Test 1: Scientific notation
 
-supabase-js@2:7  POST https://xoojokmiwwtawgitoovp.supabase.co/auth/v1/signup 422 (Unprocessable Content)
+&nbsp; Value: 5e-10
 
-(anonymous) @ supabase-js@2:7
+&nbsp; Type: number
 
-h.headers @ supabase-js@2:7
+&nbsp; String: "5e-10"
 
-te @ supabase-js@2:7
+&nbsp; > 0? true
 
-signUp @ supabase-js@2:7
-
-signUp @ app.js:23
-
-handleAuthSubmit @ app.js:305
-
-(anonymous) @ app.js:249
+&nbsp; ❌ Failed: new row for relation "trades" violates check constraint "trades\_total\_btc\_check"
 
 
+
+Test 2: Fixed decimal
+
+&nbsp; Value: 5e-10
+
+&nbsp; Type: number
+
+&nbsp; String: "5e-10"
+
+&nbsp; > 0? true
+
+&nbsp; ❌ Failed: new row for relation "trades" violates check constraint "trades\_total\_btc\_check"
+
+
+
+Test 3: String conversion
+
+&nbsp; Value: 5e-10
+
+&nbsp; Type: number
+
+&nbsp; String: "5e-10"
+
+&nbsp; > 0? true
+
+&nbsp; ❌ Failed: new row for relation "trades" violates check constraint "trades\_total\_btc\_check"
+
+
+
+Test 4: Number constructor
+
+&nbsp; Value: 5e-10
+
+&nbsp; Type: number
+
+&nbsp; String: "5e-10"
+
+&nbsp; > 0? true
+
+&nbsp; ❌ Failed: new row for relation "trades" violates check constraint "trades\_total\_btc\_check"
+
+
+
+Test 5: Explicit decimal
+
+&nbsp; Value: 5e-10
+
+&nbsp; Type: number
+
+&nbsp; String: "5e-10"
+
+&nbsp; > 0? true
+
+&nbsp; ❌ Failed: new row for relation "trades" violates check constraint "trades\_total\_btc\_check"
+
+
+
+Test 6: Large decimal
+
+&nbsp; Value: 0.000001
+
+&nbsp; Type: number
+
+&nbsp; String: "0.000001"
+
+&nbsp; > 0? true
+
+&nbsp; ✅ Success!
+
+
+
+Final Test: Exact value from debug (5e-10)
+
+&nbsp; Original: 5e-10
+
+&nbsp; Processed: 5e-10
+
+&nbsp; Are they equal? true
+
+&nbsp; ❌ Failed: new row for relation "trades" violates check constraint "trades\_total\_btc\_check"
 

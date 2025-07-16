@@ -159,7 +159,7 @@ const Market = {
                 if (order.user_id === AppState.user.id) continue; // Prevent self-trading
                 
                 const fillAmount = Math.min(remainingAmount, order.amount_wc);
-                const fillTotal = fillAmount * order.price_btc;
+                const fillTotal = parseFloat((fillAmount * order.price_btc).toFixed(20));
                 
                 fills.push({
                     orderId: order.id,
@@ -223,7 +223,7 @@ const Market = {
                 if (order.user_id === AppState.user.id) continue; // Prevent self-trading
                 
                 const fillAmount = Math.min(remainingAmount, order.amount_wc);
-                const fillTotal = fillAmount * order.price_btc;
+                const fillTotal = parseFloat((fillAmount * order.price_btc).toFixed(20));
                 
                 fills.push({
                     orderId: order.id,
@@ -279,9 +279,11 @@ const Market = {
                 if (updateError) throw updateError;
 
                 // Create trade record
+                // Convert scientific notation to decimal to avoid database constraint issues
+                const totalBtcDecimal = parseFloat(fill.total.toFixed(20));
                 const tradeData = {
-                    amount_wc: fill.amount,
-                    total_btc: fill.total,
+                    amount_wc: parseFloat(fill.amount.toFixed(8)),
+                    total_btc: totalBtcDecimal > 0 ? totalBtcDecimal : 0.00000000000000000001,
                     status: 'pending'
                 };
 
@@ -384,6 +386,16 @@ const Market = {
      */
     async executeAutomaticMatching() {
         try {
+            // Prevent duplicate executions
+            if (this._matchingInProgress) {
+                console.log('🔒 Automatic matching already in progress, skipping');
+                return false;
+            }
+            this._matchingInProgress = true;
+            
+            // Get fresh order data from database (not stale cached data)
+            console.log('🔄 Fetching fresh order data for matching');
+            
             // Get all open orders
             const { data: orders, error } = await supabase
                 .from('orders')
@@ -392,7 +404,15 @@ const Market = {
                 .order('created_at', { ascending: true }); // First come, first served
 
             if (error) throw error;
-            if (!orders || orders.length < 2) return false; // Need at least 2 orders to match
+            if (!orders || orders.length < 2) {
+                console.log('🔄 Not enough orders for matching:', orders?.length || 0);
+                return false; // Need at least 2 orders to match
+            }
+            
+            console.log('🔄 Found orders for matching:', orders.length);
+            orders.forEach(order => {
+                console.log(`  ${order.type.toUpperCase()}: ${order.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat (${order.id.substring(0, 8)}...)`);
+            });
 
             // Convert to WC/sat and separate by type
             const buyOrders = orders
@@ -429,7 +449,7 @@ const Market = {
                     
                     // Calculate fill amount
                     const fillAmount = Math.min(remainingBuyAmount, sellOrder.amount_wc);
-                    const fillTotal = fillAmount * sellOrder.price_btc;
+                    const fillTotal = parseFloat((fillAmount * sellOrder.price_btc).toFixed(20));
                     
                     fills.push({
                         orderId: sellOrder.id,
@@ -475,6 +495,9 @@ const Market = {
         } catch (error) {
             console.error('Auto-matching failed:', error);
             return false;
+        } finally {
+            // Always release the lock
+            this._matchingInProgress = false;
         }
     },
 
@@ -488,7 +511,25 @@ const Market = {
             // Process each fill using the database function
             for (const fill of fills) {
                 const buyRemainingWc = buyOrder.amount_wc - fill.amount;
-                const sellRemainingWc = fill.originalOrder.amount_wc - fill.amount;
+                
+                // Get the current sell order amount from database (not the modified JavaScript amount)
+                const { data: currentSellOrder, error: fetchError } = await supabase
+                    .from('orders')
+                    .select('amount_wc')
+                    .eq('id', fill.orderId)
+                    .single();
+                
+                if (fetchError) throw fetchError;
+                
+                // Calculate remaining amount based on current database amount
+                const sellRemainingWc = currentSellOrder.amount_wc - fill.amount;
+                
+                console.log('🔄 Calculation debug:', {
+                    currentSellAmount: currentSellOrder.amount_wc,
+                    fillAmount: fill.amount,
+                    calculatedRemaining: sellRemainingWc,
+                    expected: currentSellOrder.amount_wc - fill.amount
+                });
                 
                 console.log('🔄 Calling execute_trade_match database function');
                 
@@ -502,7 +543,7 @@ const Market = {
                     p_sell_remaining_wc: sellRemainingWc
                 });
                 
-                const { data, error } = await supabase.rpc('execute_trade_match_debug', {
+                const { data, error } = await supabase.rpc('execute_trade_match_debug_v2', {
                     p_buy_order_id: buyOrder.id,
                     p_sell_order_id: fill.orderId,
                     p_trade_amount_wc: fill.amount,
@@ -518,7 +559,7 @@ const Market = {
                     throw error;
                 }
                 
-                if (data !== 'SUCCESS') {
+                if (!data.includes('FUNCTION END - SUCCESS')) {
                     console.error('❌ Database function failed:', data);
                     throw new Error(`Database function failed: ${data}`);
                 }
@@ -1232,6 +1273,12 @@ const UI = {
  * Application Initialization
  */
 document.addEventListener('DOMContentLoaded', () => {
+    // Skip initialization in test mode
+    if (window.TEST_MODE) {
+        console.log('🧪 Test mode detected - skipping UI initialization');
+        return;
+    }
+    
     // Initialize UI
     UI.init();
     

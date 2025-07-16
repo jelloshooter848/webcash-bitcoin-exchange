@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug BTC Values</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-output { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Debug BTC Calculation Values</h1>
+    
+    <button onclick="debugBTCValues()">Debug BTC Values</button>
+    <div id="debug-output" class="debug-output"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        window.TEST_MODE = true;
+    </script>
+    <script src="app.js"></script>
+    
+    <script>
+        async function debugBTCValues() {
+            const output = document.getElementById('debug-output');
+            
+            try {
+                // Get the same sell order from the test
+                const { data: sellOrders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('type', 'sell')
+                    .eq('status', 'open')
+                    .order('price_btc', { ascending: true });
+                
+                if (error) throw error;
+                
+                let debugText = `BTC Value Analysis\n\n`;
+                
+                // Test the calculation that failed
+                const order = sellOrders[0]; // First sell order
+                const fillAmount = 50; // 50 WC (the amount that failed)
+                const fillTotal = parseFloat((fillAmount * order.price_btc).toFixed(20));
+                
+                debugText += `Order details:\n`;
+                debugText += `  Price in BTC: ${order.price_btc}\n`;
+                debugText += `  Price in WC/sat: ${Utils.btcPriceToWcPerSat(order.price_btc)}\n`;
+                debugText += `  Amount to fill: ${fillAmount} WC\n\n`;
+                
+                debugText += `Calculation:\n`;
+                debugText += `  fillTotal = ${fillAmount} * ${order.price_btc}\n`;
+                debugText += `  fillTotal = ${fillTotal}\n`;
+                debugText += `  fillTotal > 0? ${fillTotal > 0}\n`;
+                debugText += `  fillTotal as string: "${fillTotal.toString()}"\n`;
+                debugText += `  fillTotal.toFixed(20): ${fillTotal.toFixed(20)}\n\n`;
+                
+                // Check what gets stored in database
+                const tradeData = {
+                    amount_wc: fillAmount,
+                    total_btc: fillTotal,
+                    status: 'pending'
+                };
+                
+                debugText += `Trade data to be inserted:\n`;
+                debugText += `  amount_wc: ${tradeData.amount_wc} (type: ${typeof tradeData.amount_wc})\n`;
+                debugText += `  total_btc: ${tradeData.total_btc} (type: ${typeof tradeData.total_btc})\n`;
+                debugText += `  total_btc > 0? ${tradeData.total_btc > 0}\n\n`;
+                
+                // Test different precision approaches
+                const fixedBTC = parseFloat(fillTotal.toFixed(20));
+                const scientificBTC = parseFloat(fillTotal.toExponential());
+                
+                debugText += `Precision tests:\n`;
+                debugText += `  Fixed precision: ${fixedBTC} (${fixedBTC > 0})\n`;
+                debugText += `  Scientific notation: ${scientificBTC} (${scientificBTC > 0})\n\n`;
+                
+                // Test if it's a precision issue
+                if (fillTotal > 0 && fillTotal < 1e-15) {
+                    debugText += `⚠️ Warning: Value is extremely small (${fillTotal})\n`;
+                    debugText += `This might cause database precision issues\n\n`;
+                }
+                
+                // Test actual database insert
+                debugText += `Testing database insert...\n`;
+                
+                // Use fake user IDs for testing
+                const testTradeData = {
+                    ...tradeData,
+                    buyer_id: '00000000-0000-0000-0000-000000000000',
+                    seller_id: '00000000-0000-0000-0000-000000000001'
+                };
+                
+                // This will fail but show us the exact error
+                const { error: insertError } = await supabase
+                    .from('trades')
+                    .insert([testTradeData]);
+                
+                if (insertError) {
+                    debugText += `❌ Database insert failed: ${insertError.message}\n`;
+                    debugText += `Error code: ${insertError.code}\n`;
+                    debugText += `Error details: ${insertError.details}\n`;
+                } else {
+                    debugText += `✅ Database insert succeeded\n`;
+                }
+                
+                output.textContent = debugText;
+                
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

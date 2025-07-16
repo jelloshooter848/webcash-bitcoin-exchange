@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buy/Sell System Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .test-results { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        input { padding: 5px; margin: 5px; }
+        
+        /* Notification styles */
+        #notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .notification {
+            background: #3498db;
+            color: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            max-width: 300px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .notification.success {
+            background: #27ae60;
+        }
+        .notification.error {
+            background: #e74c3c;
+        }
+        .notification.warning {
+            background: #f39c12;
+        }
+    </style>
+</head>
+<body>
+    <h1>WBX Buy/Sell System Test</h1>
+    
+    <!-- Notifications container -->
+    <div id="notifications"></div>
+    
+    <div class="test-section">
+        <h2>Test 1: Market Buy Order</h2>
+        <input type="number" id="market-buy-amount" placeholder="Amount WC" value="10" step="0.01">
+        <button onclick="testMarketBuy()">Test Market Buy</button>
+        <div id="market-buy-result" class="test-results"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 2: Market Sell Order</h2>
+        <input type="number" id="market-sell-amount" placeholder="Amount WC" value="10" step="0.01">
+        <button onclick="testMarketSell()">Test Market Sell</button>
+        <div id="market-sell-result" class="test-results"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 3: Limit Buy Order</h2>
+        <input type="number" id="limit-buy-amount" placeholder="Amount WC" value="10" step="0.01">
+        <input type="number" id="limit-buy-price" placeholder="Price WC/sat" value="100" step="1">
+        <button onclick="testLimitBuy()">Test Limit Buy</button>
+        <div id="limit-buy-result" class="test-results"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 4: Limit Sell Order</h2>
+        <input type="number" id="limit-sell-amount" placeholder="Amount WC" value="10" step="0.01">
+        <input type="number" id="limit-sell-price" placeholder="Price WC/sat" value="120" step="1">
+        <button onclick="testLimitSell()">Test Limit Sell</button>
+        <div id="limit-sell-result" class="test-results"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 5: Check Order Book</h2>
+        <button onclick="testOrderBook()">Refresh Order Book</button>
+        <div id="order-book-result" class="test-results"></div>
+    </div>
+
+    <!-- Load Supabase CDN first -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        // Prevent app.js from auto-initializing
+        window.TEST_MODE = true;
+    </script>
+    <script src="app.js"></script>
+    <script>
+        async function testMarketBuy() {
+            const amount = document.getElementById('market-buy-amount').value;
+            const resultDiv = document.getElementById('market-buy-result');
+            
+            try {
+                resultDiv.innerHTML = '<div class="warning">Testing market buy...</div>';
+                await Market.marketBuy(amount);
+                resultDiv.innerHTML = '<div class="success">Market buy test completed - check console for details</div>';
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Market buy failed: ${error.message}</div>`;
+            }
+        }
+        
+        async function testMarketSell() {
+            const amount = document.getElementById('market-sell-amount').value;
+            const resultDiv = document.getElementById('market-sell-result');
+            
+            try {
+                resultDiv.innerHTML = '<div class="warning">Testing market sell...</div>';
+                await Market.marketSell(amount);
+                resultDiv.innerHTML = '<div class="success">Market sell test completed - check console for details</div>';
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Market sell failed: ${error.message}</div>`;
+            }
+        }
+        
+        async function testLimitBuy() {
+            const amount = document.getElementById('limit-buy-amount').value;
+            const price = document.getElementById('limit-buy-price').value;
+            const resultDiv = document.getElementById('limit-buy-result');
+            
+            try {
+                resultDiv.innerHTML = '<div class="warning">Testing limit buy...</div>';
+                await Market.placeLimitOrder('buy', amount, price);
+                resultDiv.innerHTML = '<div class="success">Limit buy test completed - check console for details</div>';
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Limit buy failed: ${error.message}</div>`;
+            }
+        }
+        
+        async function testLimitSell() {
+            const amount = document.getElementById('limit-sell-amount').value;
+            const price = document.getElementById('limit-sell-price').value;
+            const resultDiv = document.getElementById('limit-sell-result');
+            
+            try {
+                resultDiv.innerHTML = '<div class="warning">Testing limit sell...</div>';
+                await Market.placeLimitOrder('sell', amount, price);
+                resultDiv.innerHTML = '<div class="success">Limit sell test completed - check console for details</div>';
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Limit sell failed: ${error.message}</div>`;
+            }
+        }
+        
+        async function testOrderBook() {
+            const resultDiv = document.getElementById('order-book-result');
+            
+            try {
+                resultDiv.innerHTML = '<div class="warning">Fetching order book...</div>';
+                
+                const { data: orders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                const ordersList = orders.map(order => 
+                    `${order.type.toUpperCase()}: ${order.amount_wc} WC at ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat`
+                ).join('<br>');
+                
+                resultDiv.innerHTML = `<div class="success">Order Book (${orders.length} orders):<br>${ordersList}</div>`;
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Order book fetch failed: ${error.message}</div>`;
+            }
+        }
+        
+        // Initialize app state for testing
+        window.addEventListener('load', async () => {
+            console.log('🧪 Buy/Sell System Test loaded');
+            
+            // Check if dependencies are loaded
+            if (typeof supabase === 'undefined') {
+                console.error('❌ Supabase not loaded');
+                return;
+            }
+            if (typeof Utils === 'undefined') {
+                console.error('❌ Utils not loaded');
+                return;
+            }
+            if (typeof AppState === 'undefined') {
+                console.error('❌ AppState not loaded');
+                return;
+            }
+            
+            console.log('✅ All dependencies loaded successfully');
+            
+            // Check if user is authenticated
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    AppState.user = user;
+                    AppState.isAuthenticated = true;
+                    console.log('✅ User authenticated:', user.email);
+                } else {
+                    console.log('❌ User not authenticated - some tests may fail');
+                }
+            } catch (error) {
+                console.error('❌ Authentication check failed:', error);
+            }
+        });
+    </script>
+</body>
+</html>

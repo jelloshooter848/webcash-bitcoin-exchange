@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Order Updates</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .debug-output { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        
+        #notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .notification {
+            background: #3498db;
+            color: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            max-width: 300px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .notification.success { background: #27ae60; }
+        .notification.error { background: #e74c3c; }
+        .notification.warning { background: #f39c12; }
+    </style>
+</head>
+<body>
+    <h1>Debug Order Updates</h1>
+    
+    <div id="notifications"></div>
+    
+    <div class="debug-section">
+        <h2>Test Market Buy Order Update</h2>
+        <button onclick="debugMarketBuyUpdate()">Debug Market Buy (10 WC) with Order Updates</button>
+        <div id="market-buy-debug" class="debug-output"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>Order Book Before/After</h2>
+        <button onclick="showOrderBook()">Show Current Order Book</button>
+        <div id="order-book-debug" class="debug-output"></div>
+    </div>
+
+    <!-- Load dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        window.TEST_MODE = true;
+    </script>
+    <script src="app.js"></script>
+    
+    <script>
+        async function showOrderBook() {
+            const output = document.getElementById('order-book-debug');
+            
+            try {
+                const { data: orders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                let debugText = `Current Order Book (${orders.length} orders):\n\n`;
+                
+                orders.forEach(order => {
+                    debugText += `${order.type.toUpperCase()}: ${order.amount_wc} WC at ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat\n`;
+                    debugText += `  ID: ${order.id}\n`;
+                    debugText += `  Status: ${order.status}\n`;
+                    debugText += `  Updated: ${order.updated_at}\n\n`;
+                });
+                
+                output.textContent = debugText;
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        async function debugMarketBuyUpdate() {
+            const output = document.getElementById('market-buy-debug');
+            
+            try {
+                output.textContent = 'Starting market buy debug...\n\n';
+                
+                // Step 1: Show order book before
+                const { data: ordersBefore, error: errorBefore } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('type', 'sell')
+                    .eq('status', 'open')
+                    .order('price_btc', { ascending: true });
+                
+                if (errorBefore) throw errorBefore;
+                
+                output.textContent += 'BEFORE Market Buy:\n';
+                ordersBefore.forEach(order => {
+                    output.textContent += `  Order ${order.id.substring(0, 8)}: ${order.amount_wc} WC\n`;
+                });
+                output.textContent += '\n';
+                
+                // Step 2: Simulate market buy logic
+                let remainingAmount = 10;
+                let totalBTC = 0;
+                const fills = [];
+                
+                for (const order of ordersBefore) {
+                    if (remainingAmount <= 0) break;
+                    if (order.user_id === AppState.user?.id) continue;
+                    
+                    const fillAmount = Math.min(remainingAmount, order.amount_wc);
+                    const fillTotal = parseFloat((fillAmount * order.price_btc).toFixed(20));
+                    
+                    fills.push({
+                        orderId: order.id,
+                        amount: fillAmount,
+                        price: order.price_btc,
+                        total: fillTotal,
+                        originalOrder: order
+                    });
+                    
+                    remainingAmount -= fillAmount;
+                    totalBTC += fillTotal;
+                }
+                
+                output.textContent += `Calculated ${fills.length} fills\n\n`;
+                
+                // Step 3: Execute order updates manually
+                for (const fill of fills) {
+                    const remainingOrderAmount = fill.originalOrder.amount_wc - fill.amount;
+                    const isCompletelyFilled = fill.amount >= fill.originalOrder.amount_wc;
+                    
+                    output.textContent += `Processing fill:\n`;
+                    output.textContent += `  Order ID: ${fill.orderId.substring(0, 8)}\n`;
+                    output.textContent += `  Original amount: ${fill.originalOrder.amount_wc}\n`;
+                    output.textContent += `  Fill amount: ${fill.amount}\n`;
+                    output.textContent += `  Remaining: ${remainingOrderAmount}\n`;
+                    output.textContent += `  Completely filled: ${isCompletelyFilled}\n`;
+                    
+                    // Update the order
+                    const updateData = {
+                        status: isCompletelyFilled ? 'matched' : 'open',
+                        updated_at: new Date().toISOString()
+                    };
+                    
+                    if (!isCompletelyFilled) {
+                        updateData.amount_wc = remainingOrderAmount;
+                    }
+                    
+                    output.textContent += `  Update data: ${JSON.stringify(updateData)}\n`;
+                    
+                    const { error: updateError } = await supabase
+                        .from('orders')
+                        .update(updateData)
+                        .eq('id', fill.orderId);
+                    
+                    if (updateError) {
+                        output.textContent += `  ❌ Update failed: ${updateError.message}\n`;
+                        throw updateError;
+                    }
+                    
+                    output.textContent += `  ✅ Order updated successfully\n`;
+                    
+                    // Create trade record
+                    const totalBtcDecimal = parseFloat(fill.total.toFixed(20));
+                    const tradeData = {
+                        amount_wc: parseFloat(fill.amount.toFixed(8)),
+                        total_btc: totalBtcDecimal > 0 ? totalBtcDecimal : 0.00000000000000000001,
+                        status: 'pending',
+                        buyer_id: AppState.user.id,
+                        seller_id: fill.originalOrder.user_id
+                    };
+                    
+                    const { error: tradeError } = await supabase
+                        .from('trades')
+                        .insert([tradeData]);
+                    
+                    if (tradeError) {
+                        output.textContent += `  ❌ Trade creation failed: ${tradeError.message}\n`;
+                        throw tradeError;
+                    }
+                    
+                    output.textContent += `  ✅ Trade created successfully\n\n`;
+                }
+                
+                // Step 4: Show order book after
+                const { data: ordersAfter, error: errorAfter } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('type', 'sell')
+                    .eq('status', 'open')
+                    .order('price_btc', { ascending: true });
+                
+                if (errorAfter) throw errorAfter;
+                
+                output.textContent += 'AFTER Market Buy:\n';
+                ordersAfter.forEach(order => {
+                    output.textContent += `  Order ${order.id.substring(0, 8)}: ${order.amount_wc} WC\n`;
+                });
+                
+                output.textContent += '\n✅ Market buy debug completed successfully!\n';
+                
+            } catch (error) {
+                output.textContent += `\n❌ Error: ${error.message}\n`;
+                console.error('Market buy debug error:', error);
+            }
+        }
+        
+        // Initialize
+        window.addEventListener('load', async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    AppState.user = user;
+                    AppState.isAuthenticated = true;
+                    console.log('✅ User authenticated');
+                    
+                    // Show initial order book
+                    await showOrderBook();
+                }
+            } catch (error) {
+                console.error('Authentication error:', error);
+            }
+        });
+    </script>
+</body>
+</html>

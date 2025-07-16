@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Database Insert</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-output { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Test Database Insert Formats</h1>
+    
+    <button onclick="testInsertFormats()">Test Different Insert Formats</button>
+    <div id="debug-output" class="debug-output"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        window.TEST_MODE = true;
+    </script>
+    <script src="app.js"></script>
+    
+    <script>
+        async function testInsertFormats() {
+            const output = document.getElementById('debug-output');
+            
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    output.textContent = 'Not authenticated';
+                    return;
+                }
+                
+                output.textContent = 'Testing different insert formats...\n\n';
+                
+                // Test different ways to format the same value: 5e-10
+                const testValues = [
+                    { name: 'Scientific notation', value: 5e-10 },
+                    { name: 'Fixed decimal', value: parseFloat((5e-10).toFixed(20)) },
+                    { name: 'String conversion', value: parseFloat('0.0000000005') },
+                    { name: 'Number constructor', value: Number(5e-10) },
+                    { name: 'Explicit decimal', value: 0.0000000005 },
+                    { name: 'Large decimal', value: 0.000001 } // Should definitely work
+                ];
+                
+                for (let i = 0; i < testValues.length; i++) {
+                    const test = testValues[i];
+                    output.textContent += `Test ${i + 1}: ${test.name}\n`;
+                    output.textContent += `  Value: ${test.value}\n`;
+                    output.textContent += `  Type: ${typeof test.value}\n`;
+                    output.textContent += `  String: "${test.value.toString()}"\n`;
+                    output.textContent += `  > 0? ${test.value > 0}\n`;
+                    
+                    const tradeData = {
+                        amount_wc: 1,
+                        total_btc: test.value,
+                        status: 'pending',
+                        buyer_id: user.id,
+                        seller_id: user.id // Using same user for test
+                    };
+                    
+                    const { error } = await supabase
+                        .from('trades')
+                        .insert([tradeData]);
+                    
+                    if (error) {
+                        output.textContent += `  ❌ Failed: ${error.message}\n`;
+                    } else {
+                        output.textContent += `  ✅ Success!\n`;
+                        
+                        // Clean up - delete the test record
+                        await supabase
+                            .from('trades')
+                            .delete()
+                            .eq('amount_wc', 1)
+                            .eq('total_btc', test.value);
+                    }
+                    
+                    output.textContent += `\n`;
+                }
+                
+                // Test the exact value from the debug
+                output.textContent += `Final Test: Exact value from debug (5e-10)\n`;
+                const exactValue = 5e-10;
+                const processedValue = parseFloat(exactValue.toFixed(20));
+                
+                output.textContent += `  Original: ${exactValue}\n`;
+                output.textContent += `  Processed: ${processedValue}\n`;
+                output.textContent += `  Are they equal? ${exactValue === processedValue}\n`;
+                
+                const exactTradeData = {
+                    amount_wc: 50,
+                    total_btc: processedValue,
+                    status: 'pending',
+                    buyer_id: user.id,
+                    seller_id: user.id
+                };
+                
+                const { error: exactError } = await supabase
+                    .from('trades')
+                    .insert([exactTradeData]);
+                
+                if (exactError) {
+                    output.textContent += `  ❌ Failed: ${exactError.message}\n`;
+                } else {
+                    output.textContent += `  ✅ Success!\n`;
+                }
+                
+            } catch (error) {
+                output.textContent += `\nError: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

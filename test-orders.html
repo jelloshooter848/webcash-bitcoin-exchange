@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Orders Setup</title>
+</head>
+<body>
+    <h1>Add Test Orders</h1>
+    <div id="result">Ready to add test orders...</div>
+    <button id="addTestOrders">Add Test Buy/Sell Orders</button>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script>
+        document.getElementById('addTestOrders').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                // Check if user is authenticated
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    resultDiv.innerHTML = '<p style="color: red;">Please sign in first at index.html</p>';
+                    return;
+                }
+
+                // Add test sell orders (cheaper to more expensive)
+                const sellOrders = [
+                    { type: 'sell', amount_wc: 100, price_btc: 0.0001 },
+                    { type: 'sell', amount_wc: 200, price_btc: 0.00012 },
+                    { type: 'sell', amount_wc: 150, price_btc: 0.00015 }
+                ];
+
+                // Add test buy orders (higher to lower price)
+                const buyOrders = [
+                    { type: 'buy', amount_wc: 75, price_btc: 0.000095 },
+                    { type: 'buy', amount_wc: 125, price_btc: 0.00009 },
+                    { type: 'buy', amount_wc: 200, price_btc: 0.000085 }
+                ];
+
+                const allOrders = [...sellOrders, ...buyOrders].map(order => ({
+                    ...order,
+                    user_id: user.id,
+                    status: 'open'
+                }));
+
+                const { data, error } = await supabase
+                    .from('orders')
+                    .insert(allOrders)
+                    .select();
+
+                if (error) throw error;
+
+                resultDiv.innerHTML = `
+                    <h2 style="color: green;">✅ Test Orders Added!</h2>
+                    <p>Added ${data.length} orders:</p>
+                    <ul>
+                        <li>3 Sell orders: 0.0001, 0.00012, 0.00015 BTC/WC</li>
+                        <li>3 Buy orders: 0.000095, 0.00009, 0.000085 BTC/WC</li>
+                    </ul>
+                    <p><strong>Current market price should be:</strong> ~0.0000975 BTC/WC</p>
+                    <p>Now go test market buy/sell at index.html!</p>
+                `;
+
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <h2 style="color: red;">❌ Error</h2>
+                    <p>${error.message}</p>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

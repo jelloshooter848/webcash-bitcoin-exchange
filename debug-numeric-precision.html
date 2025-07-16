@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Numeric Precision</title>
+</head>
+<body>
+    <h1>Debug Numeric Precision</h1>
+    <div id="output"></div>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        // Test the exact value
+        const value = 5e-10;
+        
+        output.innerHTML = `
+            <h3>Value Analysis:</h3>
+            <p>Original: ${value}</p>
+            <p>As decimal: ${value.toFixed(30)}</p>
+            <p>Scientific: ${value.toExponential()}</p>
+            <p>String: "${value.toString()}"</p>
+            
+            <h3>Database Precision Check:</h3>
+            <p>NUMERIC(20,8) supports up to 8 decimal places</p>
+            <p>5e-10 = ${value.toFixed(30)}</p>
+            <p>This has ${value.toFixed(30).split('.')[1].length} decimal places</p>
+            <p>5e-10 in 8 decimal places: ${value.toFixed(8)}</p>
+            <p>Is it zero when rounded to 8 places? ${parseFloat(value.toFixed(8)) === 0}</p>
+            
+            <h3>The Problem:</h3>
+            <p>NUMERIC(20,8) can only store 8 decimal places</p>
+            <p>5e-10 = 0.0000000005 (10 decimal places)</p>
+            <p>When rounded to 8 places: ${value.toFixed(8)} = ${parseFloat(value.toFixed(8))}</p>
+            <p>This becomes 0, violating the constraint!</p>
+        `;
+    </script>
+</body>
+</html>

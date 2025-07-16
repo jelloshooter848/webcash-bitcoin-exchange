@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Actual Market Order</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .debug-output { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        
+        #notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .notification {
+            background: #3498db;
+            color: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            max-width: 300px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .notification.success { background: #27ae60; }
+        .notification.error { background: #e74c3c; }
+        .notification.warning { background: #f39c12; }
+    </style>
+</head>
+<body>
+    <h1>Test Actual Market Order Execution</h1>
+    
+    <div id="notifications"></div>
+    
+    <div class="debug-section">
+        <h2>Market Buy Test with Full Debug</h2>
+        <button onclick="testMarketBuyWithDebug()">Test Market Buy (5 WC) with Debug</button>
+        <div id="market-buy-debug" class="debug-output"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>Market Sell Test with Full Debug</h2>
+        <button onclick="testMarketSellWithDebug()">Test Market Sell (5 WC) with Debug</button>
+        <div id="market-sell-debug" class="debug-output"></div>
+    </div>
+
+    <!-- Load dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        window.TEST_MODE = true;
+    </script>
+    <script src="app.js"></script>
+    
+    <script>
+        async function testMarketBuyWithDebug() {
+            const output = document.getElementById('market-buy-debug');
+            
+            try {
+                output.textContent = 'Starting market buy test...\n\n';
+                
+                // Step 1: Get sell orders
+                const { data: sellOrders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('type', 'sell')
+                    .eq('status', 'open')
+                    .order('price_btc', { ascending: true });
+                
+                if (error) throw error;
+                
+                output.textContent += `✅ Found ${sellOrders.length} sell orders\n`;
+                
+                if (sellOrders.length === 0) {
+                    output.textContent += '❌ No sell orders available\n';
+                    return;
+                }
+                
+                // Step 2: Calculate fills
+                let remainingAmount = 5;
+                let totalBTC = 0;
+                const fills = [];
+                
+                for (const order of sellOrders) {
+                    if (remainingAmount <= 0) break;
+                    if (order.user_id === AppState.user.id) continue;
+                    
+                    const fillAmount = Math.min(remainingAmount, order.amount_wc);
+                    const fillTotal = fillAmount * order.price_btc;
+                    
+                    fills.push({
+                        orderId: order.id,
+                        amount: fillAmount,
+                        price: order.price_btc,
+                        total: fillTotal,
+                        originalOrder: order
+                    });
+                    
+                    remainingAmount -= fillAmount;
+                    totalBTC += fillTotal;
+                }
+                
+                output.textContent += `✅ Calculated ${fills.length} fills, remaining: ${remainingAmount}\n`;
+                
+                if (remainingAmount > 0) {
+                    output.textContent += '❌ Insufficient liquidity\n';
+                    return;
+                }
+                
+                // Step 3: Execute the trade manually with debug
+                output.textContent += '\n🔄 Executing trade...\n';
+                
+                for (const fill of fills) {
+                    output.textContent += `\nProcessing fill: ${fill.amount} WC from order ${fill.orderId}\n`;
+                    
+                    // Update order
+                    const remainingOrderAmount = fill.originalOrder.amount_wc - fill.amount;
+                    const isCompletelyFilled = fill.amount >= fill.originalOrder.amount_wc;
+                    
+                    const updateData = {
+                        status: isCompletelyFilled ? 'matched' : 'open',
+                        updated_at: new Date().toISOString()
+                    };
+                    
+                    if (!isCompletelyFilled) {
+                        updateData.amount_wc = remainingOrderAmount;
+                    }
+                    
+                    output.textContent += `  Updating order status to: ${updateData.status}\n`;
+                    if (updateData.amount_wc) {
+                        output.textContent += `  New amount: ${updateData.amount_wc}\n`;
+                    }
+                    
+                    const { error: updateError } = await supabase
+                        .from('orders')
+                        .update(updateData)
+                        .eq('id', fill.orderId);
+                    
+                    if (updateError) {
+                        output.textContent += `  ❌ Order update failed: ${updateError.message}\n`;
+                        throw updateError;
+                    }
+                    
+                    output.textContent += `  ✅ Order updated successfully\n`;
+                    
+                    // Create trade record
+                    const tradeData = {
+                        amount_wc: fill.amount,
+                        total_btc: fill.total,
+                        status: 'pending',
+                        buyer_id: AppState.user.id,
+                        seller_id: fill.originalOrder.user_id
+                    };
+                    
+                    output.textContent += `  Creating trade record...\n`;
+                    
+                    const { error: tradeError } = await supabase
+                        .from('trades')
+                        .insert([tradeData]);
+                    
+                    if (tradeError) {
+                        output.textContent += `  ❌ Trade creation failed: ${tradeError.message}\n`;
+                        throw tradeError;
+                    }
+                    
+                    output.textContent += `  ✅ Trade created successfully\n`;
+                }
+                
+                output.textContent += '\n✅ Market buy completed successfully!\n';
+                
+            } catch (error) {
+                output.textContent += `\n❌ Error: ${error.message}\n`;
+                console.error('Market buy error:', error);
+            }
+        }
+        
+        async function testMarketSellWithDebug() {
+            const output = document.getElementById('market-sell-debug');
+            
+            try {
+                output.textContent = 'Starting market sell test...\n\n';
+                
+                // Step 1: Get buy orders
+                const { data: buyOrders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('type', 'buy')
+                    .eq('status', 'open')
+                    .order('price_btc', { ascending: false });
+                
+                if (error) throw error;
+                
+                output.textContent += `✅ Found ${buyOrders.length} buy orders\n`;
+                
+                if (buyOrders.length === 0) {
+                    output.textContent += '❌ No buy orders available\n';
+                    return;
+                }
+                
+                // Step 2: Calculate fills
+                let remainingAmount = 5;
+                let totalBTC = 0;
+                const fills = [];
+                
+                for (const order of buyOrders) {
+                    if (remainingAmount <= 0) break;
+                    if (order.user_id === AppState.user.id) continue;
+                    
+                    const fillAmount = Math.min(remainingAmount, order.amount_wc);
+                    const fillTotal = fillAmount * order.price_btc;
+                    
+                    fills.push({
+                        orderId: order.id,
+                        amount: fillAmount,
+                        price: order.price_btc,
+                        total: fillTotal,
+                        originalOrder: order
+                    });
+                    
+                    remainingAmount -= fillAmount;
+                    totalBTC += fillTotal;
+                }
+                
+                output.textContent += `✅ Calculated ${fills.length} fills, remaining: ${remainingAmount}\n`;
+                
+                if (remainingAmount > 0) {
+                    output.textContent += '❌ Insufficient liquidity\n';
+                    return;
+                }
+                
+                // Step 3: Execute the trade manually with debug
+                output.textContent += '\n🔄 Executing trade...\n';
+                
+                for (const fill of fills) {
+                    output.textContent += `\nProcessing fill: ${fill.amount} WC to order ${fill.orderId}\n`;
+                    
+                    // Update order
+                    const remainingOrderAmount = fill.originalOrder.amount_wc - fill.amount;
+                    const isCompletelyFilled = fill.amount >= fill.originalOrder.amount_wc;
+                    
+                    const updateData = {
+                        status: isCompletelyFilled ? 'matched' : 'open',
+                        updated_at: new Date().toISOString()
+                    };
+                    
+                    if (!isCompletelyFilled) {
+                        updateData.amount_wc = remainingOrderAmount;
+                    }
+                    
+                    output.textContent += `  Updating order status to: ${updateData.status}\n`;
+                    if (updateData.amount_wc) {
+                        output.textContent += `  New amount: ${updateData.amount_wc}\n`;
+                    }
+                    
+                    const { error: updateError } = await supabase
+                        .from('orders')
+                        .update(updateData)
+                        .eq('id', fill.orderId);
+                    
+                    if (updateError) {
+                        output.textContent += `  ❌ Order update failed: ${updateError.message}\n`;
+                        throw updateError;
+                    }
+                    
+                    output.textContent += `  ✅ Order updated successfully\n`;
+                    
+                    // Create trade record
+                    const tradeData = {
+                        amount_wc: fill.amount,
+                        total_btc: fill.total,
+                        status: 'pending',
+                        seller_id: AppState.user.id,
+                        buyer_id: fill.originalOrder.user_id
+                    };
+                    
+                    output.textContent += `  Creating trade record...\n`;
+                    
+                    const { error: tradeError } = await supabase
+                        .from('trades')
+                        .insert([tradeData]);
+                    
+                    if (tradeError) {
+                        output.textContent += `  ❌ Trade creation failed: ${tradeError.message}\n`;
+                        throw tradeError;
+                    }
+                    
+                    output.textContent += `  ✅ Trade created successfully\n`;
+                }
+                
+                output.textContent += '\n✅ Market sell completed successfully!\n';
+                
+            } catch (error) {
+                output.textContent += `\n❌ Error: ${error.message}\n`;
+                console.error('Market sell error:', error);
+            }
+        }
+        
+        // Initialize
+        window.addEventListener('load', async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    AppState.user = user;
+                    AppState.isAuthenticated = true;
+                    console.log('✅ User authenticated for testing');
+                }
+            } catch (error) {
+                console.error('Authentication error:', error);
+            }
+        });
+    </script>
+</body>
+</html>

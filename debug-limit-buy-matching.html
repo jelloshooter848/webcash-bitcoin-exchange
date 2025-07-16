@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Limit Buy Matching</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .debug-output { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; font-family: monospace; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .highlight { background: yellow; padding: 2px; }
+        
+        #notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .notification {
+            background: #3498db;
+            color: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            max-width: 300px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .notification.success { background: #27ae60; }
+        .notification.error { background: #e74c3c; }
+        .notification.warning { background: #f39c12; }
+    </style>
+</head>
+<body>
+    <h1>Debug Limit Buy Matching</h1>
+    
+    <div id="notifications"></div>
+    
+    <div class="test-section">
+        <h2>Test Setup</h2>
+        <p><strong>Current User:</strong> <span id="current-user">Not authenticated</span></p>
+        <p><strong>Instructions:</strong></p>
+        <ol>
+            <li>User A: Create a limit sell order for 5000 WC @ 1000 WC/sat</li>
+            <li>User B: Run this test to create a limit buy order for 1000 WC @ 1200 WC/sat</li>
+            <li>Expected: Sell order should reduce to 4000 WC, buy order should be fully matched</li>
+        </ol>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Controls</h2>
+        <button onclick="debugLimitBuyMatching()">Debug Limit Buy Matching (1000 WC @ 1200 WC/sat)</button>
+        <button onclick="showDetailedOrderBook()">Show Detailed Order Book</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Debug Results</h2>
+        <div id="debug-results" class="debug-output">Click "Debug Limit Buy Matching" to start...</div>
+    </div>
+
+    <!-- Load dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        window.TEST_MODE = true;
+    </script>
+    <script src="app.js"></script>
+    
+    <script>
+        let debugResults = '';
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+            debugResults += `[${timestamp}] ${prefix} ${message}\n`;
+            document.getElementById('debug-results').textContent = debugResults;
+        }
+        
+        function logSection(title) {
+            debugResults += `\n${'='.repeat(60)}\n${title}\n${'='.repeat(60)}\n`;
+            document.getElementById('debug-results').textContent = debugResults;
+        }
+        
+        function clearResults() {
+            debugResults = '';
+            document.getElementById('debug-results').textContent = 'Results cleared.';
+        }
+        
+        async function showDetailedOrderBook() {
+            try {
+                const { data: orders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                logSection('CURRENT ORDER BOOK');
+                log(`Found ${orders.length} open orders`);
+                
+                orders.forEach((order, index) => {
+                    log(`Order ${index + 1}:`);
+                    log(`  ID: ${order.id}`);
+                    log(`  Type: ${order.type.toUpperCase()}`);
+                    log(`  Amount: ${order.amount_wc} WC`);
+                    log(`  Price: ${order.price_btc} BTC (${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat)`);
+                    log(`  User: ${order.user_id.substring(0, 8)}...`);
+                    log(`  Status: ${order.status}`);
+                    log(`  Created: ${order.created_at}`);
+                    log(`  Updated: ${order.updated_at}`);
+                    log('');
+                });
+                
+            } catch (error) {
+                log(`Error showing order book: ${error.message}`, 'error');
+            }
+        }
+        
+        async function debugLimitBuyMatching() {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    log('Please sign in first', 'error');
+                    return;
+                }
+                
+                AppState.user = user;
+                AppState.isAuthenticated = true;
+                
+                logSection('DEBUG: LIMIT BUY MATCHING');
+                log(`Testing as user: ${user.email} (${user.id.substring(0, 8)}...)`);
+                
+                // Step 1: Show order book BEFORE
+                logSection('STEP 1: ORDER BOOK BEFORE LIMIT BUY');
+                const { data: beforeOrders, error: beforeError } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (beforeError) throw beforeError;
+                
+                log(`Found ${beforeOrders.length} open orders before limit buy`);
+                
+                // Focus on sell orders that could match
+                const sellOrders = beforeOrders.filter(o => o.type === 'sell');
+                log(`\nSell orders available for matching:`);
+                sellOrders.forEach((order, index) => {
+                    log(`  ${index + 1}. ${order.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat (${order.user_id.substring(0, 8)}...)`);
+                });
+                
+                // Step 2: Place limit buy order with detailed tracking
+                logSection('STEP 2: PLACING LIMIT BUY ORDER');
+                log('Placing limit buy order: 1000 WC @ 1200 WC/sat');
+                log('Expected matching: Should match with sell orders <= 1200 WC/sat');
+                
+                try {
+                    // We'll trace through the placeLimitOrder function manually
+                    const buyAmount = 1000;
+                    const buyPrice = 1200;
+                    const priceInBtc = Utils.wcPerSatToBtcPrice(buyPrice);
+                    
+                    log(`Converted price: ${buyPrice} WC/sat = ${priceInBtc} BTC`);
+                    
+                    // Insert the order
+                    const { data: newOrder, error: insertError } = await supabase
+                        .from('orders')
+                        .insert([{
+                            user_id: user.id,
+                            type: 'buy',
+                            amount_wc: buyAmount,
+                            price_btc: priceInBtc,
+                            status: 'open'
+                        }])
+                        .select();
+                    
+                    if (insertError) throw insertError;
+                    
+                    log(`✅ Buy order inserted: ${newOrder[0].id}`);
+                    
+                    // Now trace the automatic matching logic
+                    logSection('STEP 3: AUTOMATIC MATCHING LOGIC');
+                    
+                    // Get all orders for matching
+                    const { data: allOrders, error: allError } = await supabase
+                        .from('orders')
+                        .select('*')
+                        .eq('status', 'open')
+                        .order('created_at', { ascending: true });
+                    
+                    if (allError) throw allError;
+                    
+                    // Separate and convert to WC/sat
+                    const buyOrders = allOrders
+                        .filter(order => order.type === 'buy')
+                        .map(order => ({
+                            ...order,
+                            wcPerSat: Utils.btcPriceToWcPerSat(order.price_btc)
+                        }))
+                        .sort((a, b) => b.wcPerSat - a.wcPerSat);
+                    
+                    const sellOrdersForMatching = allOrders
+                        .filter(order => order.type === 'sell')
+                        .map(order => ({
+                            ...order,
+                            wcPerSat: Utils.btcPriceToWcPerSat(order.price_btc)
+                        }))
+                        .sort((a, b) => a.wcPerSat - b.wcPerSat);
+                    
+                    log(`Buy orders: ${buyOrders.length}`);
+                    log(`Sell orders: ${sellOrdersForMatching.length}`);
+                    
+                    // Simulate matching logic
+                    for (const buyOrder of buyOrders) {
+                        log(`\nProcessing buy order: ${buyOrder.id.substring(0, 8)}... (${buyOrder.amount_wc} WC @ ${buyOrder.wcPerSat} WC/sat)`);
+                        
+                        if (buyOrder.amount_wc <= 0) {
+                            log(`  Skipping - already filled`);
+                            continue;
+                        }
+                        
+                        let remainingBuyAmount = buyOrder.amount_wc;
+                        const fills = [];
+                        let totalBTC = 0;
+                        
+                        for (const sellOrder of sellOrdersForMatching) {
+                            log(`  Checking sell order: ${sellOrder.id.substring(0, 8)}... (${sellOrder.amount_wc} WC @ ${sellOrder.wcPerSat} WC/sat)`);
+                            
+                            if (sellOrder.amount_wc <= 0) {
+                                log(`    Skipping - already filled`);
+                                continue;
+                            }
+                            
+                            if (buyOrder.wcPerSat < sellOrder.wcPerSat) {
+                                log(`    No match - buy price ${buyOrder.wcPerSat} < sell price ${sellOrder.wcPerSat}`);
+                                break;
+                            }
+                            
+                            if (buyOrder.user_id === sellOrder.user_id) {
+                                log(`    Skipping - self-trading prevention`);
+                                continue;
+                            }
+                            
+                            // Calculate fill
+                            const fillAmount = Math.min(remainingBuyAmount, sellOrder.amount_wc);
+                            const fillTotal = parseFloat((fillAmount * sellOrder.price_btc).toFixed(20));
+                            
+                            log(`    ✅ MATCH FOUND!`);
+                            log(`      Fill amount: ${fillAmount} WC`);
+                            log(`      Fill price: ${sellOrder.wcPerSat} WC/sat`);
+                            log(`      Fill total: ${fillTotal} BTC`);
+                            
+                            fills.push({
+                                orderId: sellOrder.id,
+                                amount: fillAmount,
+                                price: sellOrder.price_btc,
+                                total: fillTotal,
+                                originalOrder: sellOrder
+                            });
+                            
+                            remainingBuyAmount -= fillAmount;
+                            totalBTC += fillTotal;
+                            
+                            log(`      Remaining buy amount: ${remainingBuyAmount} WC`);
+                            
+                            // Update local sell order amount for further matching
+                            sellOrder.amount_wc -= fillAmount;
+                            log(`      Sell order new amount: ${sellOrder.amount_wc} WC`);
+                            
+                            if (remainingBuyAmount <= 0) {
+                                log(`    Buy order completely filled`);
+                                break;
+                            }
+                        }
+                        
+                        log(`\n  Final results for buy order:`);
+                        log(`    Fills: ${fills.length}`);
+                        log(`    Total matched: ${buyOrder.amount_wc - remainingBuyAmount} WC`);
+                        log(`    Remaining: ${remainingBuyAmount} WC`);
+                        
+                        // This is where the database function would be called
+                        if (fills.length > 0) {
+                            log(`\n  🔄 Would call database function to execute ${fills.length} fills`);
+                            log(`    But not actually executing to avoid duplicate trades`);
+                        }
+                    }
+                    
+                } catch (error) {
+                    log(`❌ Limit buy failed: ${error.message}`, 'error');
+                }
+                
+                // Step 3: Show order book AFTER
+                logSection('STEP 4: ORDER BOOK AFTER LIMIT BUY');
+                
+                // Wait a moment for any automatic matching to complete
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                const { data: afterOrders, error: afterError } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (afterError) throw afterError;
+                
+                log(`Found ${afterOrders.length} open orders after limit buy`);
+                
+                // Compare before and after
+                const sellOrdersAfter = afterOrders.filter(o => o.type === 'sell');
+                log(`\nSell orders after matching:`);
+                sellOrdersAfter.forEach((order, index) => {
+                    log(`  ${index + 1}. ${order.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat (${order.user_id.substring(0, 8)}...)`);
+                });
+                
+                // Step 4: Analysis
+                logSection('STEP 5: ANALYSIS');
+                
+                // Find changes in sell orders
+                sellOrders.forEach(beforeOrder => {
+                    const afterOrder = sellOrdersAfter.find(o => o.id === beforeOrder.id);
+                    if (afterOrder) {
+                        const reduction = beforeOrder.amount_wc - afterOrder.amount_wc;
+                        if (reduction > 0) {
+                            log(`Order ${beforeOrder.id.substring(0, 8)}... reduced by ${reduction} WC (${beforeOrder.amount_wc} → ${afterOrder.amount_wc})`);
+                        } else {
+                            log(`Order ${beforeOrder.id.substring(0, 8)}... unchanged at ${beforeOrder.amount_wc} WC`);
+                        }
+                    } else {
+                        log(`Order ${beforeOrder.id.substring(0, 8)}... was completely filled and removed`);
+                    }
+                });
+                
+                // Check trades
+                const { data: trades, error: tradeError } = await supabase
+                    .from('trades')
+                    .select('*')
+                    .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
+                    .order('created_at', { ascending: false })
+                    .limit(5);
+                
+                if (tradeError) throw tradeError;
+                
+                log(`\nRecent trades involving current user: ${trades.length}`);
+                trades.forEach((trade, index) => {
+                    const role = trade.buyer_id === user.id ? 'BOUGHT' : 'SOLD';
+                    log(`  ${index + 1}. ${role}: ${trade.amount_wc} WC for ${trade.total_btc} BTC (${trade.status})`);
+                });
+                
+                logSection('DEBUG COMPLETE');
+                log('Check the analysis above to see if the matching behavior is correct!');
+                
+            } catch (error) {
+                log(`Debug failed: ${error.message}`, 'error');
+                console.error('Debug error:', error);
+            }
+        }
+        
+        // Initialize
+        window.addEventListener('load', async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    AppState.user = user;
+                    AppState.isAuthenticated = true;
+                    document.getElementById('current-user').textContent = `${user.email} (${user.id.substring(0, 8)}...)`;
+                } else {
+                    document.getElementById('current-user').textContent = 'Not authenticated';
+                }
+                
+                // Show initial order book
+                await showDetailedOrderBook();
+            } catch (error) {
+                console.error('Initialization error:', error);
+            }
+        });
+    </script>
+</body>
+</html>

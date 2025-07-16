@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Trading Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .debug-output { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; font-family: monospace; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        
+        #notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .notification {
+            background: #3498db;
+            color: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            max-width: 300px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .notification.success { background: #27ae60; }
+        .notification.error { background: #e74c3c; }
+        .notification.warning { background: #f39c12; }
+    </style>
+</head>
+<body>
+    <h1>Comprehensive Trading System Test</h1>
+    
+    <div id="notifications"></div>
+    
+    <div class="test-section">
+        <h2>Test Setup</h2>
+        <p><strong>Current User:</strong> <span id="current-user">Not authenticated</span></p>
+        <p><strong>Instructions:</strong> Run this test, then switch to another user account and run it again to test cross-user trading.</p>
+        <button onclick="runComprehensiveTest()">Run Complete Trading Test</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <div id="test-results" class="debug-output">Click "Run Complete Trading Test" to start...</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Manual Order Book Check</h2>
+        <button onclick="showOrderBook()">Show Current Order Book</button>
+        <div id="order-book-display" class="debug-output"></div>
+    </div>
+
+    <!-- Load dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        window.TEST_MODE = true;
+    </script>
+    <script src="app.js"></script>
+    
+    <script>
+        let testResults = '';
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+            testResults += `[${timestamp}] ${prefix} ${message}\n`;
+            document.getElementById('test-results').textContent = testResults;
+            console.log(`${prefix} ${message}`);
+        }
+        
+        function logSection(title) {
+            testResults += `\n${'='.repeat(50)}\n${title}\n${'='.repeat(50)}\n`;
+            document.getElementById('test-results').textContent = testResults;
+        }
+        
+        async function showOrderBook() {
+            const output = document.getElementById('order-book-display');
+            
+            try {
+                const { data: orders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                let displayText = `Order Book (${orders.length} open orders):\n\n`;
+                
+                // Group by type
+                const buyOrders = orders.filter(o => o.type === 'buy').sort((a, b) => b.price_btc - a.price_btc);
+                const sellOrders = orders.filter(o => o.type === 'sell').sort((a, b) => a.price_btc - b.price_btc);
+                
+                displayText += `BUY ORDERS (${buyOrders.length}):\n`;
+                buyOrders.forEach(order => {
+                    displayText += `  ${order.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat (${order.user_id.substring(0, 8)}...)\n`;
+                });
+                
+                displayText += `\nSELL ORDERS (${sellOrders.length}):\n`;
+                sellOrders.forEach(order => {
+                    displayText += `  ${order.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat (${order.user_id.substring(0, 8)}...)\n`;
+                });
+                
+                output.textContent = displayText;
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        async function runComprehensiveTest() {
+            testResults = '';
+            logSection('COMPREHENSIVE TRADING SYSTEM TEST');
+            
+            try {
+                // Check authentication
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    log('Please sign in first', 'error');
+                    return;
+                }
+                
+                log(`Testing as user: ${user.email} (${user.id.substring(0, 8)}...)`, 'info');
+                AppState.user = user;
+                AppState.isAuthenticated = true;
+                
+                // Test 1: Show initial order book
+                logSection('TEST 1: INITIAL ORDER BOOK');
+                const { data: initialOrders, error: initialError } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (initialError) throw initialError;
+                
+                log(`Found ${initialOrders.length} open orders initially`);
+                initialOrders.forEach(order => {
+                    log(`  ${order.type.toUpperCase()}: ${order.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat (User: ${order.user_id.substring(0, 8)}...)`);
+                });
+                
+                // Test 2: Place limit orders
+                logSection('TEST 2: PLACING LIMIT ORDERS');
+                
+                // Place a buy order
+                log('Placing limit buy order: 25 WC @ 150 WC/sat');
+                try {
+                    await Market.placeLimitOrder('buy', 25, 150);
+                    log('Buy order placed successfully', 'success');
+                } catch (error) {
+                    log(`Buy order failed: ${error.message}`, 'error');
+                }
+                
+                // Wait a moment
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Place a sell order
+                log('Placing limit sell order: 30 WC @ 80 WC/sat');
+                try {
+                    await Market.placeLimitOrder('sell', 30, 80);
+                    log('Sell order placed successfully', 'success');
+                } catch (error) {
+                    log(`Sell order failed: ${error.message}`, 'error');
+                }
+                
+                // Wait a moment
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Test 3: Check order book after limit orders
+                logSection('TEST 3: ORDER BOOK AFTER LIMIT ORDERS');
+                const { data: afterLimitOrders, error: limitError } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (limitError) throw limitError;
+                
+                log(`Found ${afterLimitOrders.length} open orders after limit orders`);
+                afterLimitOrders.forEach(order => {
+                    log(`  ${order.type.toUpperCase()}: ${order.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat (User: ${order.user_id.substring(0, 8)}...)`);
+                });
+                
+                // Test 4: Market buy orders
+                logSection('TEST 4: MARKET BUY ORDERS');
+                
+                // Find available sell orders
+                const availableSells = afterLimitOrders.filter(o => o.type === 'sell' && o.user_id !== user.id);
+                
+                if (availableSells.length > 0) {
+                    const sellOrder = availableSells[0];
+                    const buyAmount = Math.min(15, sellOrder.amount_wc);
+                    
+                    log(`Attempting market buy: ${buyAmount} WC`);
+                    log(`Available sell: ${sellOrder.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(sellOrder.price_btc)} WC/sat`);
+                    
+                    try {
+                        await Market.marketBuy(buyAmount);
+                        log(`Market buy completed successfully`, 'success');
+                    } catch (error) {
+                        log(`Market buy failed: ${error.message}`, 'error');
+                    }
+                } else {
+                    log('No available sell orders for market buy', 'warning');
+                }
+                
+                // Wait a moment
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Test 5: Market sell orders
+                logSection('TEST 5: MARKET SELL ORDERS');
+                
+                // Find available buy orders
+                const availableBuys = afterLimitOrders.filter(o => o.type === 'buy' && o.user_id !== user.id);
+                
+                if (availableBuys.length > 0) {
+                    const buyOrder = availableBuys[0];
+                    const sellAmount = Math.min(20, buyOrder.amount_wc);
+                    
+                    log(`Attempting market sell: ${sellAmount} WC`);
+                    log(`Available buy: ${buyOrder.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(buyOrder.price_btc)} WC/sat`);
+                    
+                    try {
+                        await Market.marketSell(sellAmount);
+                        log(`Market sell completed successfully`, 'success');
+                    } catch (error) {
+                        log(`Market sell failed: ${error.message}`, 'error');
+                    }
+                } else {
+                    log('No available buy orders for market sell', 'warning');
+                }
+                
+                // Wait a moment
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Test 6: Final order book check
+                logSection('TEST 6: FINAL ORDER BOOK CHECK');
+                const { data: finalOrders, error: finalError } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (finalError) throw finalError;
+                
+                log(`Found ${finalOrders.length} open orders finally`);
+                finalOrders.forEach(order => {
+                    log(`  ${order.type.toUpperCase()}: ${order.amount_wc} WC @ ${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat (User: ${order.user_id.substring(0, 8)}...)`);
+                });
+                
+                // Test 7: Trade history
+                logSection('TEST 7: TRADE HISTORY');
+                const { data: trades, error: tradeError } = await supabase
+                    .from('trades')
+                    .select('*')
+                    .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                
+                if (tradeError) throw tradeError;
+                
+                log(`Found ${trades.length} trades involving current user`);
+                trades.forEach(trade => {
+                    const role = trade.buyer_id === user.id ? 'BOUGHT' : 'SOLD';
+                    log(`  ${role}: ${trade.amount_wc} WC for ${Utils.formatCurrency(trade.total_btc, 'BTC')} (${trade.status})`);
+                });
+                
+                // Test 8: Summary
+                logSection('TEST 8: SUMMARY');
+                const initialCount = initialOrders.length;
+                const finalCount = finalOrders.length;
+                const tradeCount = trades.length;
+                
+                log(`Initial orders: ${initialCount}`);
+                log(`Final orders: ${finalCount}`);
+                log(`Trades created: ${tradeCount}`);
+                
+                if (tradeCount > 0) {
+                    log('✅ Trading system is working - trades were created', 'success');
+                } else {
+                    log('⚠️ No trades were created - check for cross-user orders', 'warning');
+                }
+                
+                logSection('TEST COMPLETE');
+                log('Run this test with different user accounts to test cross-user trading!', 'info');
+                
+            } catch (error) {
+                log(`Test failed: ${error.message}`, 'error');
+                console.error('Test error:', error);
+            }
+        }
+        
+        // Initialize
+        window.addEventListener('load', async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    AppState.user = user;
+                    AppState.isAuthenticated = true;
+                    document.getElementById('current-user').textContent = `${user.email} (${user.id.substring(0, 8)}...)`;
+                } else {
+                    document.getElementById('current-user').textContent = 'Not authenticated';
+                }
+                
+                // Show initial order book
+                await showOrderBook();
+            } catch (error) {
+                console.error('Initialization error:', error);
+            }
+        });
+    </script>
+</body>
+</html>

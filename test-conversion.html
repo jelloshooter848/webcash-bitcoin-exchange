@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test WC/sat Conversion</title>
+</head>
+<body>
+    <h1>Testing WC/sat to BTC Conversion</h1>
+    <div id="result"></div>
+
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        const resultDiv = document.getElementById('result');
+        
+        // Test your input: 5 WC/sat
+        const wcPerSat = 5;
+        const btcPrice = Utils.wcPerSatToBtcPrice(wcPerSat);
+        
+        resultDiv.innerHTML = `
+            <h2>Input: ${wcPerSat} WC/sat</h2>
+            <p><strong>Conversion result:</strong> ${btcPrice} BTC per WC</p>
+            <p><strong>Scientific notation:</strong> ${btcPrice.toExponential()}</p>
+            <p><strong>Decimal places:</strong> ${btcPrice.toString().split('.')[1]?.length || 0}</p>
+            <hr>
+            <h3>Database Constraint Check:</h3>
+            <p>NUMERIC(20,8) allows max 8 decimal places</p>
+            <p>Our result has: ${btcPrice.toString().split('.')[1]?.length || 0} decimal places</p>
+            <p><strong>Will it fit?</strong> ${(btcPrice.toString().split('.')[1]?.length || 0) <= 8 ? '✅ YES' : '❌ NO'}</p>
+        `;
+    </script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Market Orders</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .debug-output { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        
+        /* Notification styles */
+        #notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .notification {
+            background: #3498db;
+            color: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            max-width: 300px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .notification.success { background: #27ae60; }
+        .notification.error { background: #e74c3c; }
+        .notification.warning { background: #f39c12; }
+    </style>
+</head>
+<body>
+    <h1>Debug Market Orders</h1>
+    
+    <div id="notifications"></div>
+    
+    <div class="debug-section">
+        <h2>1. Current Order Book</h2>
+        <button onclick="debugOrderBook()">Refresh Order Book</button>
+        <div id="order-book-debug" class="debug-output"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>2. Market Buy Analysis</h2>
+        <button onclick="debugMarketBuy()">Analyze Market Buy (5 WC)</button>
+        <div id="market-buy-debug" class="debug-output"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>3. Market Sell Analysis</h2>
+        <button onclick="debugMarketSell()">Analyze Market Sell (5 WC)</button>
+        <div id="market-sell-debug" class="debug-output"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>4. User Info</h2>
+        <button onclick="debugUserInfo()">Show User Info</button>
+        <div id="user-info-debug" class="debug-output"></div>
+    </div>
+
+    <!-- Load dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        window.TEST_MODE = true;
+    </script>
+    <script src="app.js"></script>
+    
+    <script>
+        async function debugOrderBook() {
+            const output = document.getElementById('order-book-debug');
+            
+            try {
+                const { data: orders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                let debugText = `Total orders: ${orders.length}\n\n`;
+                
+                orders.forEach(order => {
+                    debugText += `Order ID: ${order.id}\n`;
+                    debugText += `Type: ${order.type}\n`;
+                    debugText += `Amount: ${order.amount_wc} WC\n`;
+                    debugText += `Price: ${order.price_btc} BTC (${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat)\n`;
+                    debugText += `User ID: ${order.user_id}\n`;
+                    debugText += `Status: ${order.status}\n`;
+                    debugText += `Created: ${order.created_at}\n`;
+                    debugText += `---\n`;
+                });
+                
+                output.textContent = debugText;
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        async function debugMarketBuy() {
+            const output = document.getElementById('market-buy-debug');
+            
+            try {
+                // Get sell orders like market buy does
+                const { data: sellOrders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('type', 'sell')
+                    .eq('status', 'open')
+                    .order('price_btc', { ascending: true });
+                
+                if (error) throw error;
+                
+                let debugText = `Market Buy Analysis (5 WC)\n\n`;
+                debugText += `Available sell orders: ${sellOrders.length}\n\n`;
+                
+                if (sellOrders.length === 0) {
+                    debugText += `❌ No sell orders available\n`;
+                    output.textContent = debugText;
+                    return;
+                }
+                
+                let remainingAmount = 5;
+                let totalBTC = 0;
+                const fills = [];
+                
+                for (const order of sellOrders) {
+                    debugText += `Checking order: ${order.id}\n`;
+                    debugText += `  Amount: ${order.amount_wc} WC\n`;
+                    debugText += `  Price: ${order.price_btc} BTC (${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat)\n`;
+                    debugText += `  User: ${order.user_id}\n`;
+                    debugText += `  Current user: ${AppState.user?.id}\n`;
+                    
+                    if (remainingAmount <= 0) {
+                        debugText += `  ✅ Order filled - breaking\n`;
+                        break;
+                    }
+                    
+                    if (order.user_id === AppState.user?.id) {
+                        debugText += `  ⚠️ Self-trading - skipping\n`;
+                        continue;
+                    }
+                    
+                    const fillAmount = Math.min(remainingAmount, order.amount_wc);
+                    const fillTotal = fillAmount * order.price_btc;
+                    
+                    debugText += `  ✅ Fill: ${fillAmount} WC for ${fillTotal} BTC\n`;
+                    
+                    fills.push({
+                        orderId: order.id,
+                        amount: fillAmount,
+                        price: order.price_btc,
+                        total: fillTotal,
+                        originalOrder: order
+                    });
+                    
+                    remainingAmount -= fillAmount;
+                    totalBTC += fillTotal;
+                    
+                    debugText += `  Remaining: ${remainingAmount} WC\n`;
+                }
+                
+                debugText += `\nFinal result:\n`;
+                debugText += `Fills: ${fills.length}\n`;
+                debugText += `Remaining amount: ${remainingAmount}\n`;
+                debugText += `Total BTC: ${totalBTC}\n`;
+                
+                if (remainingAmount > 0) {
+                    debugText += `❌ Insufficient liquidity (${remainingAmount} WC remaining)\n`;
+                } else {
+                    debugText += `✅ Order can be filled completely\n`;
+                }
+                
+                output.textContent = debugText;
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        async function debugMarketSell() {
+            const output = document.getElementById('market-sell-debug');
+            
+            try {
+                // Get buy orders like market sell does
+                const { data: buyOrders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('type', 'buy')
+                    .eq('status', 'open')
+                    .order('price_btc', { ascending: false });
+                
+                if (error) throw error;
+                
+                let debugText = `Market Sell Analysis (5 WC)\n\n`;
+                debugText += `Available buy orders: ${buyOrders.length}\n\n`;
+                
+                if (buyOrders.length === 0) {
+                    debugText += `❌ No buy orders available\n`;
+                    output.textContent = debugText;
+                    return;
+                }
+                
+                let remainingAmount = 5;
+                let totalBTC = 0;
+                const fills = [];
+                
+                for (const order of buyOrders) {
+                    debugText += `Checking order: ${order.id}\n`;
+                    debugText += `  Amount: ${order.amount_wc} WC\n`;
+                    debugText += `  Price: ${order.price_btc} BTC (${Utils.btcPriceToWcPerSat(order.price_btc)} WC/sat)\n`;
+                    debugText += `  User: ${order.user_id}\n`;
+                    debugText += `  Current user: ${AppState.user?.id}\n`;
+                    
+                    if (remainingAmount <= 0) {
+                        debugText += `  ✅ Order filled - breaking\n`;
+                        break;
+                    }
+                    
+                    if (order.user_id === AppState.user?.id) {
+                        debugText += `  ⚠️ Self-trading - skipping\n`;
+                        continue;
+                    }
+                    
+                    const fillAmount = Math.min(remainingAmount, order.amount_wc);
+                    const fillTotal = fillAmount * order.price_btc;
+                    
+                    debugText += `  ✅ Fill: ${fillAmount} WC for ${fillTotal} BTC\n`;
+                    
+                    fills.push({
+                        orderId: order.id,
+                        amount: fillAmount,
+                        price: order.price_btc,
+                        total: fillTotal,
+                        originalOrder: order
+                    });
+                    
+                    remainingAmount -= fillAmount;
+                    totalBTC += fillTotal;
+                    
+                    debugText += `  Remaining: ${remainingAmount} WC\n`;
+                }
+                
+                debugText += `\nFinal result:\n`;
+                debugText += `Fills: ${fills.length}\n`;
+                debugText += `Remaining amount: ${remainingAmount}\n`;
+                debugText += `Total BTC: ${totalBTC}\n`;
+                
+                if (remainingAmount > 0) {
+                    debugText += `❌ Insufficient liquidity (${remainingAmount} WC remaining)\n`;
+                } else {
+                    debugText += `✅ Order can be filled completely\n`;
+                }
+                
+                output.textContent = debugText;
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        async function debugUserInfo() {
+            const output = document.getElementById('user-info-debug');
+            
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                
+                let debugText = `User Authentication:\n`;
+                debugText += `Authenticated: ${!!user}\n`;
+                debugText += `User ID: ${user?.id}\n`;
+                debugText += `Email: ${user?.email}\n\n`;
+                
+                debugText += `AppState:\n`;
+                debugText += `isAuthenticated: ${AppState.isAuthenticated}\n`;
+                debugText += `user: ${AppState.user?.id}\n`;
+                debugText += `user email: ${AppState.user?.email}\n`;
+                
+                output.textContent = debugText;
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        // Initialize
+        window.addEventListener('load', async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    AppState.user = user;
+                    AppState.isAuthenticated = true;
+                    console.log('✅ User authenticated for debugging');
+                }
+            } catch (error) {
+                console.error('Authentication error:', error);
+            }
+        });
+    </script>
+</body>
+</html>

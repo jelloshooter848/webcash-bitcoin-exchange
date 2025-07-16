@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Price Calculation</title>
+</head>
+<body>
+    <h1>Testing Price Calculation Logic</h1>
+    <div id="result"></div>
+
+    <script src="utils/api-helpers.js"></script>
+    <script>
+        // Simulate your order book data
+        const orders = [
+            { type: 'buy', price_btc: 0.00025000, status: 'open' },  // 200 WC/sat
+            { type: 'buy', price_btc: 0.00002500, status: 'open' },  // 2000 WC/sat  
+            { type: 'buy', price_btc: 0.00010000, status: 'open' },  // 500 WC/sat
+            { type: 'buy', price_btc: 0.00005000, status: 'open' },  // 1000 WC/sat
+            { type: 'sell', price_btc: 0.00010000, status: 'open' }, // 500 WC/sat
+            { type: 'sell', price_btc: 0.00005000, status: 'open' }  // 1000 WC/sat (this should be gone after your trade)
+        ];
+
+        // Test current calculation
+        const openOrders = orders.filter(order => order.status === 'open');
+        const buyOrders = openOrders.filter(order => order.type === 'buy').sort((a, b) => b.price_btc - a.price_btc);
+        const sellOrders = openOrders.filter(order => order.type === 'sell').sort((a, b) => a.price_btc - b.price_btc);
+
+        const bestBuy = buyOrders[0].price_btc;
+        const bestSell = sellOrders[0].price_btc;
+        const avgPrice = (bestBuy + bestSell) / 2;
+
+        document.getElementById('result').innerHTML = `
+            <h2>Current Logic Results:</h2>
+            <h3>Buy Orders (sorted by price_btc DESC):</h3>
+            ${buyOrders.map(order => `
+                <p>BTC: ${order.price_btc} → WC/sat: ${Utils.btcPriceToWcPerSat(order.price_btc)}</p>
+            `).join('')}
+            
+            <h3>Sell Orders (sorted by price_btc ASC):</h3>
+            ${sellOrders.map(order => `
+                <p>BTC: ${order.price_btc} → WC/sat: ${Utils.btcPriceToWcPerSat(order.price_btc)}</p>
+            `).join('')}
+
+            <h3>Market Price Calculation:</h3>
+            <p><strong>Best Buy (BTC):</strong> ${bestBuy} → ${Utils.btcPriceToWcPerSat(bestBuy)} WC/sat</p>
+            <p><strong>Best Sell (BTC):</strong> ${bestSell} → ${Utils.btcPriceToWcPerSat(bestSell)} WC/sat</p>
+            <p><strong>Average (BTC):</strong> ${avgPrice} → ${Utils.btcPriceToWcPerSat(avgPrice)} WC/sat</p>
+
+            <hr>
+            <h3>What it SHOULD be:</h3>
+            <p><strong>Best Buy:</strong> Highest WC/sat willing to pay = 2000 WC/sat</p>
+            <p><strong>Best Sell:</strong> Lowest WC/sat willing to accept = 500 WC/sat</p>
+            <p><strong>Market Price:</strong> (2000 + 500) / 2 = 1250 WC/sat</p>
+        `;
+    </script>
+</body>
+</html>

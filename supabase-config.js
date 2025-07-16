@@ -7,8 +7,7 @@ const SUPABASE_CONFIG = {
 };
 
 // Initialize Supabase client
-const { createClient } = supabase;
-const supabaseClient = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+const supabaseClient = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
 
 // Export for use in other modules
 window.supabase = supabaseClient;
